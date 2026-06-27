@@ -26,15 +26,22 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 EMBEDDING_MODEL = "text-embedding-3-large"
 CHAT_MODEL = "gpt-4o-mini"
 
-db_pool = ThreadedConnectionPool(1, 10, SUPABASE_CONNECTION_STRING, cursor_factory=RealDictCursor)
+try:
+    db_pool = ThreadedConnectionPool(1, 10, SUPABASE_CONNECTION_STRING, cursor_factory=RealDictCursor)
+except Exception as e:
+    print(f"ERROR al conectar a la base de datos: {e}")
+    db_pool = None
 
 
 def get_db():
+    if db_pool is None:
+        raise HTTPException(status_code=503, detail="Database connection is unavailable")
     return db_pool.getconn()
 
 
 def put_db(conn):
-    db_pool.putconn(conn)
+    if db_pool is not None:
+        db_pool.putconn(conn)
 
 
 _query_count = 0
@@ -150,7 +157,8 @@ class ConsultorResponse(BaseModel):
 async def lifespan(app: FastAPI):
     logger.info("Backend iniciado en http://localhost:8000")
     yield
-    db_pool.closeall()
+    if db_pool is not None:
+        db_pool.closeall()
 
 
 app = FastAPI(title="Cavaltec - Autodiagnóstico Ley 1581", lifespan=lifespan)
