@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cavaltec — Autodiagnóstico Ley 1581</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cavaltec: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' },
+      },
+      fontFamily: { sans: ['Inter','system-ui','sans-serif'] },
+    },
+  },
+}
+</script>
+<style>
+  body { background: #09090b; }
+  .glass { background: rgba(255,255,255,0.04); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.06); }
+  .glass-strong { background: rgba(255,255,255,0.08); backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); border: 1px solid rgba(255,255,255,0.1); }
+  .glass-card { background: rgba(255,255,255,0.03); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.06); transition: all 0.2s; }
+  .glass-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(99,102,241,0.3); transform: translateY(-1px); }
+  .toggle { position:relative; width:48px; height:26px; flex-shrink:0; cursor:pointer; }
+  .toggle input { display:none; }
+  .toggle-slider { position:absolute; inset:0; background: rgba(255,255,255,0.1); border-radius:13px; transition:0.2s; }
+  .toggle-slider::before { content:''; position:absolute; left:2px; top:2px; width:22px; height:22px; border-radius:50%; background: rgba(255,255,255,0.4); transition:0.2s; }
+  .toggle input:checked+.toggle-slider { background: #22c55e; }
+  .toggle input:checked+.toggle-slider::before { transform:translateX(22px); background:#fff; }
+  .chat-btn { position:fixed; bottom:24px; right:24px; width:60px; height:60px; border-radius:50%; background:linear-gradient(135deg,#6366f1,#818cf8); border:none; cursor:pointer; box-shadow:0 8px 32px rgba(99,102,241,0.3); z-index:50; transition:all 0.2s; display:flex; align-items:center; justify-content:center; }
+  .chat-btn:hover { transform:scale(1.08); box-shadow:0 12px 40px rgba(99,102,241,0.4); }
+  .chat-btn svg { width:26px; height:26px; fill:#fff; }
+  .chat-panel { position:fixed; bottom:96px; right:24px; width:400px; height:560px; border-radius:20px; z-index:49; display:none; flex-direction:column; overflow:hidden; }
+  .chat-panel.open { display:flex; }
+  .chat-msgs { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:10px; }
+  .chat-msgs .msg { max-width:90%; padding:10px 14px; border-radius:14px; line-height:1.5; font-size:14px; white-space:pre-wrap; }
+  .chat-msgs .user { align-self:flex-end; background:#6366f1; color:#fff; border-bottom-right-radius:4px; }
+  .chat-msgs .bot { align-self:flex-start; background:rgba(255,255,255,0.06); color:#e4e4e7; border-bottom-left-radius:4px; }
+  .chat-msgs .bot .src { font-size:11px; color:rgba(255,255,255,0.35); margin-top:6px; }
+  .result-score { font-size:56px; font-weight:800; line-height:1; }
+  .score-ring { width:120px; height:120px; border-radius:50%; display:flex; align-items:center; justify-content:center; position:relative; }
+  .score-ring svg { position:absolute; width:100%; height:100%; transform:rotate(-90deg); }
+  .score-ring circle { fill:none; stroke-width:4; stroke-linecap:round; }
+  ::-webkit-scrollbar { width:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.15); border-radius:3px; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .fade-in { animation:fadeIn 0.35s ease-out; }
+  .brecha-item { animation:fadeIn 0.3s ease-out both; }
+</style>
+</head>
+<body class="text-zinc-100 font-sans antialiased">
+
+<!-- HEADER -->
+<header class="glass sticky top-0 z-40 px-6 py-4 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm">C</div>
+    <span class="text-lg font-bold bg-gradient-to-r from-indigo-400 to-violet-300 bg-clip-text text-transparent">Cavaltec</span>
+  </div>
+  <div class="flex items-center gap-2 text-sm text-zinc-500">
+    <span class="w-2 h-2 rounded-full bg-emerald-500" id="statusDot"></span>
+    <span id="statusText">conectado</span>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-4 py-8 space-y-6">
+
+  <!-- TABS -->
+  <div class="glass rounded-2xl p-1.5 flex">
+    <button class="tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all bg-indigo-500 text-white shadow-lg shadow-indigo-500/20" data-tab="diagnostico">Diagnóstico</button>
+    <button class="tab-btn flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all text-zinc-400 hover:text-white" data-tab="consultor">Consultor IA</button>
+  </div>
+
+  <!-- TAB: DIAGNÓSTICO (CONVERSACIONAL) -->
+  <div class="tab-content" id="tab-diagnostico">
+    <div class="glass rounded-2xl overflow-hidden" id="diagContainer">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-white/5">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">C</div>
+          <span class="font-semibold text-sm">Autodiagnóstico Ley 1581</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-zinc-500" id="diagProgress">0/11</span>
+          <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400" id="diagCategory">—</span>
+        </div>
+      </div>
+      <div class="chat-msgs" id="diagMsgs" style="height:400px"></div>
+      <div class="p-4 border-t border-white/5" id="diagFooter">
+        <div class="flex gap-2" id="diagAnswerBtns">
+          <button class="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500/20 text-emerald-400 font-semibold text-sm hover:bg-emerald-500/30 transition-all disabled:opacity-30" id="btnDiagSi">✅ Sí</button>
+          <button class="flex-1 py-2.5 px-4 rounded-xl bg-red-500/20 text-red-400 font-semibold text-sm hover:bg-red-500/30 transition-all disabled:opacity-30" id="btnDiagNo">❌ No</button>
+        </div>
+        <div class="hidden space-y-2" id="diagActionBtns">
+          <button class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white font-semibold text-sm hover:shadow-xl hover:shadow-indigo-500/25 transition-all" id="btnDiagPlan">📋 Generar Plan de Acción</button>
+          <button class="w-full py-2.5 px-4 rounded-xl glass-strong text-zinc-400 font-medium text-sm hover:text-white transition-all" id="btnDiagReview">✏️ Revisar respuestas</button>
+          <button class="w-full py-2.5 px-4 rounded-xl glass-strong text-zinc-400 font-medium text-sm hover:text-white transition-all" id="btnDiagReset">🔄 Nuevo diagnóstico</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTADO VISUAL -->
+    <div id="resultado" class="hidden fade-in space-y-5 pt-4">
+      <div class="glass rounded-2xl p-6">
+        <div class="flex items-center gap-6">
+          <div class="score-ring" id="scoreRing">
+            <svg><circle cx="60" cy="60" r="52" stroke="rgba(255,255,255,0.08)"/><circle cx="60" cy="60" r="52" stroke="#6366f1" id="scoreCircle" stroke-dasharray="326.7" stroke-dashoffset="326.7"/></svg>
+            <span class="text-3xl font-bold" id="rScore">0%</span>
+          </div>
+          <div>
+            <div class="text-xs text-zinc-500 uppercase tracking-wider">Nivel de cumplimiento</div>
+            <div class="text-2xl font-bold mt-1" id="rNivel">--</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-6 space-y-4" id="rCategorias"></div>
+
+      <div class="glass rounded-2xl p-6" id="rBrechas"></div>
+    </div>
+  </div>
+
+  <!-- TAB: CONSULTOR IA -->
+  <div class="tab-content hidden" id="tab-consultor">
+    <div class="glass rounded-2xl overflow-hidden">
+      <div class="chat-msgs" id="chatMsgs">
+        <div class="msg bot">👋 Soy tu consultor experto en <strong>Ley 1581</strong>. Hacé preguntas sobre el diagnóstico o pedí recomendaciones.</div>
+      </div>
+      <div class="flex gap-2 p-4 border-t border-white/5">
+        <input class="flex-1 bg-white/5 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" id="chatInput" placeholder="Ej: ¿Qué significa Q6?">
+        <button class="px-5 py-2.5 rounded-xl bg-indigo-500 text-white text-sm font-semibold hover:bg-indigo-400 transition-all disabled:opacity-40" id="chatSend">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- CHAT BUBBLE -->
+<button class="chat-btn" id="chatFab" aria-label="Chat">
+  <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12c0 1.88.52 3.66 1.42 5.18L2 22l4.82-1.42A9.93 9.93 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm-2 13l-4-4 1.41-1.41L10 12.17l6.59-6.59L18 7l-8 8z"/></svg>
+</button>
+
+<!-- CHAT PANEL -->
+<div class="chat-panel glass-strong" id="chatPanel">
+  <div class="flex items-center justify-between p-4 border-b border-white/5">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold text-xs">C</div>
+      <span class="font-semibold text-sm">Consultor Ley 1581</span>
+    </div>
+    <button class="text-zinc-500 hover:text-zinc-300 transition-colors text-lg leading-none" id="chatClose">&times;</button>
+  </div>
+  <div class="chat-msgs" id="chatPanelMsgs">
+    <div class="msg bot">👋 Consultame cualquier duda sobre el diagnóstico.</div>
+  </div>
+  <div class="flex gap-2 p-4 border-t border-white/5">
+    <input class="flex-1 bg-white/5 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" id="chatPanelInput" placeholder="Escribí tu consulta...">
+    <button class="px-5 py-2.5 rounded-xl bg-indigo-500 text-white text-sm font-semibold hover:bg-indigo-400 transition-all disabled:opacity-40" id="chatPanelSend">Enviar</button>
+  </div>
+</div>
+
+<script>
+// ─── CONSTANTES ───
+const $ = id => document.getElementById(id)
+const PREGUNTAS = [
+  { orden:1,  categoria:"politica_datos",    pregunta:"¿La empresa tiene una política de tratamiento de datos personales publicada y accesible?", peso:0 },
+  { orden:2,  categoria:"politica_datos",    pregunta:"¿La política de datos está actualizada conforme a la Ley 1581 y sus decretos reglamentarios?", peso:10 },
+  { orden:3,  categoria:"politica_datos",    pregunta:"¿Existe un procedimiento formal para atender consultas, reclamos y solicitudes de los titulares?", peso:10 },
+  { orden:4,  categoria:"politica_datos",    pregunta:"¿La empresa ha designado un oficial de protección de datos o responsable del tratamiento?", peso:10 },
+  { orden:5,  categoria:"politica_datos",    pregunta:"¿Se aplican principios de privacidad desde el diseño en todos los nuevos proyectos o sistemas?", peso:10 },
+  { orden:6,  categoria:"privacidad_diseno", pregunta:"¿Se realizan evaluaciones de impacto a la protección de datos (EIPD) antes de implementar nuevos tratamientos?", peso:12 },
+  { orden:7,  categoria:"privacidad_diseno", pregunta:"¿Los sistemas y procesos minimizan la recolección de datos personales al mínimo necesario?", peso:12 },
+  { orden:8,  categoria:"privacidad_diseno", pregunta:"¿Existe un comité o equipo de gobierno de datos que supervise el cumplimiento normativo?", peso:12 },
+  { orden:9,  categoria:"gobernanza",        pregunta:"¿Se realizan auditorías internas o externas periódicas sobre protección de datos personales?", peso:16 },
+  { orden:10, categoria:"gobernanza",        pregunta:"¿La empresa capacita a sus colaboradores en protección de datos personales de forma continua?", peso:8 },
+  { orden:11, categoria:"gobernanza",        pregunta:"¿Existe un procedimiento documentado para la gestión y notificación de brechas de seguridad?", peso:0 },
+]
+const CAT_LABELS = { politica_datos:"Política de datos", privacidad_diseno:"Privacidad desde el diseño", gobernanza:"Gobernanza" }
+const CAT_ICON   = { politica_datos:"📋", privacidad_diseno:"🔒", gobernanza:"🏛️" }
+const CAT_PESOS  = { politica_datos:40, privacidad_diseno:36, gobernanza:24 }
+const CAT_COLORS = { politica_datos:"#6366f1", privacidad_diseno:"#06b6d4", gobernanza:"#22c55e" }
+const EMPRESA_ID = crypto.randomUUID()
+let ultimoResultado = null
+
+// ─── DIAGNÓSTICO CONVERSACIONAL ───
+const diag = { step:'intro', idx:0, answers:{}, result:null }
+
+function addDiagMsg(role, html) {
+  const c = $('diagMsgs')
+  const d = document.createElement('div')
+  d.className = 'msg ' + role
+  d.innerHTML = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g,'<br>')
+  c.appendChild(d)
+  c.scrollTop = c.scrollHeight
+}
+
+function diagSetProgress() {
+  $('diagProgress').textContent = `${diag.idx}/11`
+  if (diag.idx > 0 && diag.idx <= PREGUNTAS.length) {
+    $('diagCategory').textContent = `${CAT_ICON[PREGUNTAS[diag.idx-1].categoria]} ${CAT_LABELS[PREGUNTAS[diag.idx-1].categoria]}`
+  }
+}
+
+function diagInit() {
+  diag.step = 'intro'; diag.idx = 0; diag.answers = {}; diag.result = null
+  $('diagMsgs').innerHTML = ''
+  $('resultado').classList.add('hidden')
+  $('diagAnswerBtns').classList.remove('hidden')
+  $('diagActionBtns').classList.add('hidden')
+  $('diagCategory').textContent = '—'
+  diagSetProgress()
+
+  addDiagMsg('bot', `👋 ¡Hola! Soy el asistente de **Cavaltec** para el autodiagnóstico de la **Ley 1581 de Protección de Datos Personales** en Colombia.\n\nVoy a hacerte **11 preguntas** en 3 bloques:\n\n📋 **Política de datos** (40%)\n🔒 **Privacidad desde el diseño** (36%)\n🏛️ **Gobernanza** (24%)\n\nRespondé **Sí** o **No** a cada una. Al final obtendrás tu nivel de cumplimiento y recomendaciones.\n\n¿Comenzamos?`)
+
+  $('btnDiagSi').textContent = '✅ ¡Comenzar!'
+  $('btnDiagNo').textContent = '❌ Cancelar'
+  $('btnDiagSi').onclick = diagComenzar
+  $('btnDiagNo').onclick = diagInit
+  $('btnDiagSi').disabled = false
+  $('btnDiagNo').disabled = false
+}
+
+function diagComenzar() {
+  diag.step = 'asking'
+  $('btnDiagSi').textContent = '✅ Sí'
+  $('btnDiagNo').textContent = '❌ No'
+  $('btnDiagSi').onclick = () => diagResponder(true)
+  $('btnDiagNo').onclick = () => diagResponder(false)
+  diagSiguiente()
+}
+
+function diagSiguiente() {
+  diag.idx++
+  if (diag.idx > PREGUNTAS.length) { diagCalcular(); return }
+  diagSetProgress()
+  const q = PREGUNTAS[diag.idx - 1]
+  const extra = q.orden === 1 ? '*(Pregunta maestra — peso hereda de Q2-Q5)*'
+    : q.orden === 11 ? '*(Complementaria — no suma al puntaje)*'
+    : `*(Peso: ${q.peso}%)*`
+  addDiagMsg('bot', `${CAT_ICON[q.categoria]} **${CAT_LABELS[q.categoria]}**\n\n**Q${q.orden}.** ${q.pregunta}\n\n${extra}`)
+  $('btnDiagSi').disabled = false
+  $('btnDiagNo').disabled = false
+}
+
+function diagResponder(resp) {
+  diag.answers[PREGUNTAS[diag.idx - 1].orden] = resp
+  addDiagMsg('user', resp ? '✅ **Sí**' : '❌ **No**')
+  $('btnDiagSi').disabled = true
+  $('btnDiagNo').disabled = true
+  setTimeout(diagSiguiente, 400)
+}
+
+async function diagCalcular() {
+  diag.step = 'calculating'
+  addDiagMsg('bot', `⏳ Calculando tu resultado...`)
+  const respuestas = PREGUNTAS.map(p => ({
+    pregunta_id: p.orden,
+    respuesta: diag.answers[p.orden] ?? (p.orden === 11 ? false : true)
+  }))
+  try {
+    const r = await fetch('/api/evaluacion/calcular', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({empresa_id:EMPRESA_ID, respuestas})
+    })
+    const d = await r.json()
+    if (!r.ok) throw new Error(d.detail||'Error')
+    diag.result = d; ultimoResultado = d
+    diagMostrarResultado(d)
+  } catch(e) { addDiagMsg('bot', `❌ Error: ${e.message}`) }
+}
+
+function diagMostrarResultado(d) {
+  diag.step = 'results'
+  $('diagAnswerBtns').classList.add('hidden')
+  $('diagActionBtns').classList.remove('hidden')
+
+  const pct = d.puntaje_final
+  const nivel = pct >= 80 ? '🟢 Avanzado' : pct >= 50 ? '🟡 Intermedio' : '🔴 Inicial'
+
+  let msg = `## 📊 Resultado del Autodiagnóstico\n\n**Puntaje:** ${pct}%\n**Nivel:** ${nivel}\n\n`
+  msg += `**📝 Resumen de respuestas:**\n`
+  PREGUNTAS.forEach(p => {
+    const r = diag.answers[p.orden] ?? (p.orden === 11 ? false : true)
+    msg += `- Q${p.orden}: ${r ? '✅ Sí' : '❌ No'}\n`
+  })
+  msg += `\n`
+  if (d.brechas?.length) {
+    msg += `**⚠️ Brechas detectadas (${d.brechas.length}):**\n`
+    d.brechas.forEach(b => { msg += `- Q${b.pregunta_id} (${b.peso}%): ${b.pregunta}\n` })
+  } else {
+    msg += `✅ No se detectaron brechas. ¡Excelente trabajo!`
+  }
+  addDiagMsg('bot', msg)
+  mostrarResultadoVisual(d)
+  $('resultado').scrollIntoView({behavior:'smooth',block:'start'})
+}
+
+function mostrarResultadoVisual(d) {
+  const r = $('resultado'); r.classList.remove('hidden')
+  const scoreEl = $('rScore'), circle = $('scoreCircle'), totalLen = 326.7, pct = d.puntaje_final
+  let current = 0
+  const interval = setInterval(()=>{
+    current += 1
+    if (current >= pct) { current = pct; clearInterval(interval) }
+    scoreEl.textContent = Math.round(current)+'%'
+    circle.setAttribute('stroke-dashoffset', totalLen - (totalLen * current / 100))
+  }, 15)
+  circle.setAttribute('stroke', pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444')
+  const nivelEl = $('rNivel')
+  const nivel = pct>=80?'Avanzado':pct>=50?'Intermedio':'Inicial'
+  nivelEl.textContent = nivel
+  nivelEl.className = 'text-2xl font-bold mt-1 text-'+(pct>=80?'emerald':pct>=50?'amber':'red')+'-400'
+
+  const colores = { politica_datos:'#6366f1', privacidad_diseno:'#06b6d4', gobernanza:'#22c55e' }
+  $('rCategorias').innerHTML = Object.entries(d.detalle.categorias).map(([k,v])=>{
+    const c = colores[k]||'#6366f1'
+    return `<div class="fade-in"><div class="flex justify-between text-sm mb-1.5"><span>${CAT_LABELS[k]||k}</span><span class="text-zinc-500">${v.obtenido} / ${v.posible} pts</span></div><div class="h-2 rounded-full bg-white/5 overflow-hidden"><div class="h-full rounded-full transition-all duration-700" style="width:${v.porcentaje}%;background:${c}"></div></div></div>`
+  }).join('')
+
+  const br = $('rBrechas')
+  if (d.brechas?.length) {
+    br.innerHTML = '<h4 class="text-amber-400 font-medium text-sm mb-3">⚠️ Brechas detectadas</h4>' +
+      d.brechas.map((b,i)=>`<div class="brecha-item glass-card rounded-xl p-3.5 flex items-center gap-3 mb-2" style="animation-delay:${i*0.08}s"><span class="text-amber-400 font-bold text-sm min-w-[40px]">${b.peso}%</span><span class="text-sm text-zinc-300">Q${b.pregunta_id}: ${b.pregunta}</span></div>`).join('')
+  } else {
+    br.innerHTML = '<div class="flex items-center gap-2 text-emerald-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> No se detectaron brechas</div>'
+  }
+}
+
+// ─── REVISAR RESPUESTAS ───
+function diagReview() {
+  if (diag.step === 'asking') return
+  diag.step = 'review'
+  $('diagActionBtns').classList.add('hidden')
+  $('diagAnswerBtns').classList.add('hidden')
+
+  addDiagMsg('bot', `✏️ **Modo revisión.** Hacé clic en una pregunta para cambiar tu respuesta:`)
+
+  const wrapper = document.createElement('div')
+  wrapper.className = 'msg bot'
+  wrapper.style.cssText = 'max-width:100%;padding:0;background:transparent;align-self:stretch;'
+  wrapper.id = 'diagReviewWrapper'
+
+  const listDiv = document.createElement('div')
+  listDiv.id = 'diagReviewList'
+  listDiv.style.cssText = 'display:flex;flex-direction:column;gap:4px;padding:4px 0;'
+
+  PREGUNTAS.forEach(p => {
+    const r = diag.answers[p.orden] ?? (p.orden === 11 ? false : true)
+    const btn = document.createElement('button')
+    btn.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:10px 14px;border-radius:10px;font-size:13px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);cursor:pointer;transition:all 0.15s;color:#e4e4e7;'
+    btn.innerHTML = `<span style="font-size:16px">${r?'✅':'❌'}</span><span style="color:#a1a1aa;min-width:28px">Q${p.orden}</span><span style="flex:1">${p.pregunta.substring(0,55)}${p.pregunta.length>55?'...':''}</span><span style="color:#71717a;font-size:11px">${CAT_ICON[p.categoria]}</span>`
+    btn.onmouseenter = () => { btn.style.borderColor = 'rgba(99,102,241,0.3)'; btn.style.background = 'rgba(255,255,255,0.06)' }
+    btn.onmouseleave = () => { btn.style.borderColor = 'rgba(255,255,255,0.06)'; btn.style.background = 'rgba(255,255,255,0.03)' }
+    btn.onclick = () => {
+      diag.answers[p.orden] = !r
+      addDiagMsg('user', `✏️ Q${p.orden} → **${!r?'Sí':'No'}**`)
+      wrapper.remove()
+      addDiagMsg('bot', `🔄 Recalculando con los cambios...`)
+      diagCalcular()
+    }
+    listDiv.appendChild(btn)
+  })
+
+  // Cancel button
+  const cancelBtn = document.createElement('button')
+  cancelBtn.textContent = '← Volver a resultados'
+  cancelBtn.style.cssText = 'margin-top:8px;padding:8px;border-radius:8px;font-size:13px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);cursor:pointer;transition:all 0.15s;color:#a1a1aa;width:100%;text-align:center;'
+  cancelBtn.onmouseenter = () => { cancelBtn.style.background = 'rgba(255,255,255,0.08)'; cancelBtn.style.color = '#e4e4e7' }
+  cancelBtn.onmouseleave = () => { cancelBtn.style.background = 'rgba(255,255,255,0.04)'; cancelBtn.style.color = '#a1a1aa' }
+  cancelBtn.onclick = () => {
+    wrapper.remove()
+    $('diagActionBtns').classList.remove('hidden')
+  }
+  listDiv.appendChild(cancelBtn)
+
+  wrapper.appendChild(listDiv)
+  const msgs = $('diagMsgs')
+  msgs.appendChild(wrapper)
+  msgs.scrollTop = msgs.scrollHeight
+}
+
+// ─── INICIAR ───
+diagInit()
+
+// ─── ACCIONES ───
+$('btnDiagPlan').onclick = () => {
+  document.querySelector('[data-tab="consultor"]').click()
+  const input = $('chatInput')
+  if (!ultimoResultado?.brechas?.length) {
+    input.value = 'Obtuve 100%, no hay brechas. ¿Cómo mantengo este nivel de cumplimiento?'
+  } else {
+    input.value = 'Generá el plan de acción para cerrar estas brechas'
+  }
+  enviarChat('chatInput','chatSend','tab')
+}
+$('btnDiagReview').onclick = diagReview
+$('btnDiagReset').onclick = diagInit
+
+// ─── TABS ───
+document.querySelectorAll('.tab-btn').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab-btn').forEach(b=>{b.classList.remove('bg-indigo-500','text-white','shadow-lg','shadow-indigo-500/20');b.classList.add('text-zinc-400')})
+  t.classList.add('bg-indigo-500','text-white','shadow-lg','shadow-indigo-500/20');t.classList.remove('text-zinc-400')
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.add('hidden'))
+  document.getElementById('tab-'+t.dataset.tab).classList.remove('hidden')
+}))
+
+// ─── CHAT (bubble + panel) ───
+const chatFab = document.getElementById('chatFab')
+const chatPanel = document.getElementById('chatPanel')
+const chatClose = document.getElementById('chatClose')
+
+chatFab.addEventListener('click',()=>chatPanel.classList.toggle('open'))
+chatClose.addEventListener('click',()=>chatPanel.classList.remove('open'))
+
+function addChatMsg(text, role, fuentes, target='panel') {
+  const container = target==='panel' ? document.getElementById('chatPanelMsgs') : document.getElementById('chatMsgs')
+  const div = document.createElement('div')
+  div.className = 'msg ' + role
+  div.innerHTML = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g,'<br>')
+  if (fuentes!==undefined) {
+    const s = document.createElement('div')
+    s.className = 'src'
+    s.textContent = fuentes>0 ? fuentes+' fuente(s) usada(s)' : 'Sin fuentes del RAG'
+    div.appendChild(s)
+  }
+  container.appendChild(div)
+  container.scrollTop = container.scrollHeight
+}
+
+async function enviarChat(inputId, btnId, target) {
+  const input = document.getElementById(inputId)
+  const btn = document.getElementById(btnId)
+  const msg = input.value.trim()
+  if (!msg) return
+
+  addChatMsg(msg, 'user', undefined, target)
+  input.value = ''
+  btn.disabled = true; btn.textContent = '...'
+
+  const body = { mensaje: msg }
+  if (ultimoResultado?.brechas?.length && (msg.toLowerCase().includes('plan')||msg.toLowerCase().includes('brecha'))) body.brechas = ultimoResultado.brechas
+  const m = msg.match(/Q(\d{1,2})/i)
+  if (m) body.pregunta_id = parseInt(m[1])
+
+  try {
+    const r = await fetch('/api/ia/consultor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    const d = await r.json()
+    if (!r.ok) throw new Error(d.detail||'Error')
+    addChatMsg(d.respuesta, 'bot', d.fuentes, target)
+  } catch(e) { addChatMsg('Error: '+e.message, 'error', undefined, target) }
+  finally { btn.disabled=false; btn.textContent='Enviar'; input.focus() }
+}
+
+document.getElementById('chatSend').addEventListener('click',()=>enviarChat('chatInput','chatSend','tab'))
+document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')enviarChat('chatInput','chatSend','tab')})
+document.getElementById('chatPanelSend').addEventListener('click',()=>enviarChat('chatPanelInput','chatPanelSend','panel'))
+document.getElementById('chatPanelInput').addEventListener('keydown',e=>{if(e.key==='Enter')enviarChat('chatPanelInput','chatPanelSend','panel')})
+
+// ─── HEALTH ───
+fetch('/health').then(()=>{document.getElementById('statusDot').className='w-2 h-2 rounded-full bg-emerald-500'}).catch(()=>{})
+</script>
+</body>
+</html>
