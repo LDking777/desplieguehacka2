@@ -18,8 +18,8 @@ load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-SUPABASE_CONNECTION_STRING = os.getenv("SUPABASE_CONNECTION_STRING")
+DATABASE_URL = os.getenv("RENDER_DATABASE_URL") or os.getenv("SUPABASE_CONNECTION_STRING") or ""
+print(f"DATABASE_URL: {DATABASE_URL[:50]}...")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -27,7 +27,7 @@ EMBEDDING_MODEL = "text-embedding-3-large"
 CHAT_MODEL = "gpt-4o-mini"
 
 try:
-    db_pool = ThreadedConnectionPool(1, 10, SUPABASE_CONNECTION_STRING, cursor_factory=RealDictCursor)
+    db_pool = ThreadedConnectionPool(1, 10, DATABASE_URL, cursor_factory=RealDictCursor)
 except Exception as e:
     print(f"ERROR al conectar a la base de datos: {e}")
     db_pool = None
