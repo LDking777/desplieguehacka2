@@ -1,6 +1,7 @@
 import html
 import json
 import os
+import re
 import logging
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -48,6 +49,20 @@ _query_count = 0
 
 _embedding_cache = {}
 _EMBEDDING_CACHE_MAX = 100
+
+
+def limpiar_formato(texto: str) -> str:
+    texto = re.sub(r'\*\*(.+?)\*\*', r'\1', texto)
+    texto = re.sub(r'__(.+?)__', r'\1', texto)
+    texto = re.sub(r'\*(.+?)\*', r'\1', texto)
+    texto = re.sub(r'_(.+?)_', r'\1', texto)
+    texto = re.sub(r'~~(.+?)~~', r'\1', texto)
+    texto = re.sub(r'`(.+?)`', r'\1', texto)
+    texto = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', texto)
+    texto = re.sub(r'^#{1,6}\s+', '', texto, flags=re.MULTILINE)
+    texto = re.sub(r'^[-*]\s+', '  ', texto, flags=re.MULTILINE)
+    texto = re.sub(r'\n{3,}', '\n\n', texto)
+    return texto.strip()
 
 
 def generar_embedding(texto: str) -> list[float]:
@@ -454,14 +469,14 @@ def consultor_ia(req: ConsultorRequest):
         )
 
         return ConsultorResponse(
-            respuesta=resp.choices[0].message.content,
+            respuesta=limpiar_formato(resp.choices[0].message.content),
             fuentes=len(docs),
             modo=modo,
         )
     except Exception as e:
         logger.error("Error en /api/ia/consultor: %s", str(e), exc_info=True)
         return ConsultorResponse(
-            respuesta=f"Error interno: {type(e).__name__}: {e}",
+            respuesta=limpiar_formato(f"Error interno: {type(e).__name__}: {e}"),
             fuentes=0,
             modo=modo,
         )
@@ -487,7 +502,7 @@ def chat(req: ChatRequest):
         ]
 
         resp = client.chat.completions.create(model=CHAT_MODEL, messages=messages)
-        return {"respuesta": resp.choices[0].message.content, "fuentes": len(docs)}
+        return {"respuesta": limpiar_formato(resp.choices[0].message.content), "fuentes": len(docs)}
     except Exception as e:
         logger.error("Error en /chat: %s", str(e), exc_info=True)
-        return {"respuesta": f"Error interno: {type(e).__name__}: {e}", "fuentes": 0}
+        return {"respuesta": limpiar_formato(f"Error interno: {type(e).__name__}: {e}"), "fuentes": 0}
